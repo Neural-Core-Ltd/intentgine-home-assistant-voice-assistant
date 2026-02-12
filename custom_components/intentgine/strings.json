@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Intentgine",
+        "description": "Enter your Intentgine API credentials",
+        "data": {
+          "api_key": "API Key",
+          "endpoint": "API Endpoint"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Intentgine API. Check your API key and endpoint."
+    },
+    "abort": {
+      "already_configured": "Intentgine is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Intentgine Options",
+        "data": {
+          "enable_area_toolsets": "Enable Area-Based Toolsets"
+        }
+      }
+    }
+  }
+}

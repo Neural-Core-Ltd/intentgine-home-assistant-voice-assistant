@@ -1,0 +1,15 @@
+execute_command:
+  name: Execute Command
+  description: Execute a natural language command via Intentgine
+  fields:
+    query:
+      name: Query
+      description: The natural language command to execute
+      required: true
+      example: "Turn on the living room lights"
+      selector:
+        text:
+
+sync_toolsets:
+  name: Sync Toolsets
+  description: Synchronize Home Assistant entities with Intentgine toolsets
