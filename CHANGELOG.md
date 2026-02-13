@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-02-13
+
+### Added
+- **Multi-Intent Command Support**: Handle commands with multiple intents in a single request
+  - Example: "Turn on kitchen lights and turn off bedroom lights"
+  - Uses Intentgine's classification extraction feature
+  - Automatically splits compound commands and routes to appropriate areas
+- **Natural Language Responses**: Optional `use_respond` parameter for human-friendly responses
+  - Set `use_respond=True` to get natural language feedback
+  - Uses app's configured persona
+  - Works with both single and multi-intent commands
+  - Example: "I've turned on the kitchen lights for you."
+- Classification extraction enabled on area router classification set
+- Enhanced command handler to process extracted sub-commands
+- Comprehensive extraction examples documentation (EXTRACTION-EXAMPLES.md)
+- Natural language responses documentation (NATURAL-LANGUAGE-RESPONSES.md)
+
+### Changed
+- API client now supports `enable_extraction` parameter for classification sets
+- Command handler accepts optional `use_respond` parameter (defaults to False)
+- Command handler returns structured results for multi-intent commands
+- Updated cost documentation to reflect extraction overhead
+- README updated with multi-intent command examples
+
+### Technical Details
+- Area router classification set now created with `enable_extraction: true`
+- Single-intent commands: 2 requests (1 classify + 1 resolve/respond)
+- Multi-intent commands: 2 + N requests (2 for classify with extraction + N resolve/respond)
+- Extraction happens automatically when LLM detects multiple distinct intents
+- Natural language responses use same request count as structured responses
+
 ## [1.0.0] - 2026-02-12
 
 ### Added
@@ -46,3 +77,4 @@ All notable changes to this project will be documented in this file.
 - Local LLM option (when available)
 - Advanced parameter handling
 - Custom tool templates
+- Parallel execution of extracted commands

@@ -85,16 +85,16 @@ class IntentgineAPIClient:
         """List all toolsets."""
         return await self._request("GET", "/v1/toolsets")
     
-    async def create_classification_set(self, name: str, signature: str, classes: list[dict], description: str = None) -> dict:
+    async def create_classification_set(self, name: str, signature: str, classes: list[dict], description: str = None, enable_extraction: bool = False) -> dict:
         """Create a classification set."""
-        data = {"name": name, "signature": signature, "classes": classes}
+        data = {"name": name, "signature": signature, "classes": classes, "enable_extraction": enable_extraction}
         if description:
             data["description"] = description
         return await self._request("POST", "/v1/classification-sets", data)
     
-    async def update_classification_set(self, signature: str, name: str, classes: list[dict], description: str = None) -> dict:
+    async def update_classification_set(self, signature: str, name: str, classes: list[dict], description: str = None, enable_extraction: bool = False) -> dict:
         """Update a classification set."""
-        data = {"name": name, "classes": classes}
+        data = {"name": name, "classes": classes, "enable_extraction": enable_extraction}
         if description:
             data["description"] = description
         return await self._request("PUT", f"/v1/classification-sets/{signature}", data)

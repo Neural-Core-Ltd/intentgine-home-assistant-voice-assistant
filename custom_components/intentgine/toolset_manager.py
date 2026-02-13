@@ -217,22 +217,24 @@ class ToolsetManager:
                     "description": f"Commands about the {area_name}"
                 })
         
-        # Create or update classification set
+        # Create or update classification set with extraction enabled
         try:
             await self.api_client.create_classification_set(
                 name="Home Assistant Area Router",
                 signature="ha-area-router-v1",
-                classes=area_classes
+                classes=area_classes,
+                enable_extraction=True
             )
-            _LOGGER.info("Created classification set with %d areas", len(area_classes))
+            _LOGGER.info("Created classification set with %d areas (extraction enabled)", len(area_classes))
         except:
             try:
                 await self.api_client.update_classification_set(
                     signature="ha-area-router-v1",
                     name="Home Assistant Area Router",
-                    classes=area_classes
+                    classes=area_classes,
+                    enable_extraction=True
                 )
-                _LOGGER.info("Updated classification set with %d areas", len(area_classes))
+                _LOGGER.info("Updated classification set with %d areas (extraction enabled)", len(area_classes))
             except Exception as err:
                 _LOGGER.error("Failed to create/update classification set: %s", err)
         

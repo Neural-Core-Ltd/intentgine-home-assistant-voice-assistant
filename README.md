@@ -92,12 +92,13 @@ Then just type commands and click "Run"!
 
 ### Chat Interface (Advanced)
 
-For a more conversational experience:
+For a more conversational experience with natural language responses:
 
 ```yaml
 type: custom:intentgine-chat-card
 title: Home Assistant Chat
 persona: friendly
+use_respond: true  # Enable natural language responses
 show_resolved_actions: true
 ```
 
@@ -113,6 +114,11 @@ Integration with Home Assistant's built-in voice assistant system.
 - "Set kitchen lights to 50%"
 - "Make the lights warmer"
 - "Change living room to blue"
+
+### Multi-Intent Commands
+- "Turn on kitchen lights and turn off bedroom lights"
+- "Set living room to 50% and turn on bedroom lights"
+- "Open garage door and turn on driveway lights"
 
 ### Climate
 - "Set bedroom temperature to 72"
@@ -135,14 +141,19 @@ Integration with Home Assistant's built-in voice assistant system.
 
 1. **You type a command** in natural language
 2. **Integration classifies** the command to determine the area (living room, bedroom, etc.)
-3. **Integration sends to Intentgine** with the area-specific toolset
-4. **Intentgine resolves** the command to a specific action with parameters
-5. **Integration executes** the Home Assistant service call
+   - If the command contains multiple intents (e.g., "turn on kitchen and bedroom lights"), extraction automatically splits it into separate commands
+3. **Integration sends to Intentgine** with the area-specific toolset for each command
+4. **Intentgine resolves** each command to a specific action with parameters
+5. **Integration executes** all Home Assistant service calls
 6. **You get feedback** on success or errors
 
 The integration automatically creates "toolsets" (collections of available actions) organized by area. Each toolset contains domain-based tools (one tool for all lights, one for all switches, etc.) with parameters to specify which device and what action. When you add or remove devices, it syncs automatically.
 
-**Note**: Each command uses 2 API requests (1 for classification, 1 for resolution).
+**Classification Extraction**: The area router classification set has extraction enabled, which means it can automatically detect and split multi-intent commands like "turn on kitchen lights and turn off bedroom lights" into separate commands. This happens in a single API call with minimal overhead.
+
+**Cost per command**:
+- Single-intent: 2 requests (1 classify + 1 resolve)
+- Multi-intent: 2 + N requests (2 for classify with extraction + N resolves, where N = number of intents)
 
 ## Configuration Options
 
@@ -258,13 +269,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 
 This integration is **free and open source**. However, it requires an Intentgine subscription:
 
-- **Hobbyist**: $5/mo - 10,000 requests (5,000 commands) - Small homes (2 areas, ~30 devices)
-- **Starter**: $29/mo - 100,000 requests (50,000 commands) - Medium homes (4-5 areas, ~80 devices)
-- **Business**: $99/mo - 500,000 requests (250,000 commands) - Large homes (9-10 areas, ~150+ devices)
+- **Hobbyist**: $5/mo - 10,000 requests (~5,000 single commands or ~2,500 two-intent commands)
+- **Starter**: $29/mo - 100,000 requests (~50,000 single commands or ~25,000 two-intent commands)
+- **Business**: $99/mo - 500,000 requests (~250,000 single commands or ~125,000 two-intent commands)
 
 See [intentgine.dev/pricing](https://intentgine.dev/pricing) for current pricing.
 
-Each command uses **2 requests** (1 for area classification, 1 for command resolution).
+**Request usage per command**:
+- Single-intent command: **2 requests** (1 classify + 1 resolve)
+- Multi-intent command: **2 + N requests** (2 for classify with extraction + N resolves)
+  - Example: "Turn on kitchen and bedroom lights" = 4 requests (2 classify + 2 resolves)
 
 **Recommendation**: Most users should start with **Starter ($29/mo)** for typical home setups.
 

@@ -1,8 +1,8 @@
 # Home Assistant Intentgine Integration - Documentation Index
 
-**Project Status**: ✅ Requirements & Architecture Complete  
-**Next Phase**: Phase 1 - Core Foundation (MVP)  
-**Last Updated**: 2026-02-12
+**Project Status**: ✅ v1.1.0 - Multi-Intent Support + Natural Language Responses  
+**Latest Features**: Classification Extraction & Natural Language Responses  
+**Last Updated**: 2026-02-13
 
 ## 📋 Quick Start
 
@@ -19,6 +19,18 @@
    - Environment setup
    - Directory structure creation
    - First tasks to implement
+
+3. **[EXTRACTION-EXAMPLES.md](EXTRACTION-EXAMPLES.md)** 🆕 MULTI-INTENT COMMANDS
+   - How classification extraction works
+   - Real-world examples with API flows
+   - Cost analysis and benefits
+   - Testing and troubleshooting
+
+4. **[NATURAL-LANGUAGE-RESPONSES.md](NATURAL-LANGUAGE-RESPONSES.md)** 💬 NATURAL LANGUAGE
+   - Enable human-friendly responses
+   - Use `use_respond=True` for chat interfaces
+   - Examples and use cases
+   - Persona configuration
 
 ## 📚 Core Documentation
 
@@ -42,6 +54,20 @@
   - Service call mapping
   - Error handling patterns
   - Performance considerations
+
+### Latest Features
+
+- **[EXTRACTION-INTEGRATION-SUMMARY.md](EXTRACTION-INTEGRATION-SUMMARY.md)** - v1.1.0 Feature Summary
+  - Classification extraction integration
+  - Changes made to each component
+  - Cost impact and benefits
+  - Testing instructions
+
+- **[EXTRACTION-FLOW-DIAGRAM.md](EXTRACTION-FLOW-DIAGRAM.md)** - Visual Flow Diagrams
+  - Single-intent vs multi-intent flows
+  - Cost comparison
+  - Implementation details
+  - Response formats
 
 ### Implementation
 

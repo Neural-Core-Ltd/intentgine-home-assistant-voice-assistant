@@ -13,36 +13,115 @@ class CommandHandler:
         self.api_client = api_client
         self.toolset_manager = toolset_manager
     
-    async def handle_command(self, query: str):
-        """Process a natural language command with classification."""
+    async def handle_command(self, query: str, use_respond: bool = False):
+        """Process a natural language command with classification.
+        
+        Args:
+            query: Natural language command
+            use_respond: If True, use respond endpoint for natural language responses.
+                        If False (default), use resolve endpoint for structured tool calls.
+        """
         try:
-            # Step 1: Classify to determine area (1 request)
+            # Step 1: Classify to determine area (1-2 requests depending on extraction)
             classification_result = await self.api_client.classify(
                 query,
                 classification_set="ha-area-router-v1",
                 context="Home Assistant voice command routing"
             )
             
-            area = classification_result["results"][0]["classification"]
+            result_data = classification_result["results"][0]
             
-            # Step 2: Resolve with area-specific toolset (1 request)
-            toolset_signature = f"ha-{area}-v1" if area != "global" else "ha-global-v1"
-            
-            result = await self.api_client.resolve(query, [toolset_signature])
-            
-            tool_name = result["resolved"]["tool"]
-            parameters = result["resolved"]["parameters"]
-            
-            # Step 3: Execute the tool
-            success = await self.execute_tool(tool_name, parameters)
-            
-            return {
-                "success": success,
-                "tool": tool_name,
-                "parameters": parameters,
-                "area": area,
-                "metadata": result.get("metadata", {})
-            }
+            # Check if extraction was performed
+            if result_data.get("extracted"):
+                # Handle multiple extracted commands
+                _LOGGER.info("Processing %d extracted commands", len(result_data["extracted"]))
+                results = []
+                responses = []
+                
+                for extracted in result_data["extracted"]:
+                    sub_query = extracted["query"]
+                    area = extracted["classification"]
+                    toolset_signature = f"ha-{area}-v1" if area != "global" else "ha-global-v1"
+                    
+                    if use_respond:
+                        # Use respond endpoint for natural language response
+                        respond_result = await self.api_client.respond(sub_query, [toolset_signature])
+                        tool_name = respond_result["resolved"]["tool"]
+                        parameters = respond_result["resolved"]["parameters"]
+                        response_text = respond_result.get("response", "")
+                        responses.append(response_text)
+                    else:
+                        # Use resolve endpoint for structured tool call
+                        resolve_result = await self.api_client.resolve(sub_query, [toolset_signature])
+                        tool_name = resolve_result["resolved"]["tool"]
+                        parameters = resolve_result["resolved"]["parameters"]
+                    
+                    # Execute the tool
+                    success = await self.execute_tool(tool_name, parameters)
+                    
+                    results.append({
+                        "query": sub_query,
+                        "success": success,
+                        "tool": tool_name,
+                        "parameters": parameters,
+                        "area": area
+                    })
+                
+                response_data = {
+                    "success": all(r["success"] for r in results),
+                    "extracted": True,
+                    "results": results,
+                    "metadata": classification_result.get("metadata", {})
+                }
+                
+                if use_respond and responses:
+                    # Combine responses into natural language
+                    response_data["response"] = " ".join(responses)
+                
+                return response_data
+            else:
+                # Single command (original behavior)
+                area = result_data["classification"]
+                
+                # Handle case where classification is empty (extraction needed but not performed)
+                if not area:
+                    _LOGGER.error("No classification found and extraction not performed")
+                    return {
+                        "success": False,
+                        "error": "Could not classify command. It may contain multiple intents.",
+                        "extraction_needed": result_data.get("extraction_needed", False)
+                    }
+                
+                # Step 2: Resolve or respond with area-specific toolset (1 request)
+                toolset_signature = f"ha-{area}-v1" if area != "global" else "ha-global-v1"
+                
+                if use_respond:
+                    # Use respond endpoint for natural language response
+                    result = await self.api_client.respond(query, [toolset_signature])
+                    response_text = result.get("response", "")
+                else:
+                    # Use resolve endpoint for structured tool call
+                    result = await self.api_client.resolve(query, [toolset_signature])
+                
+                tool_name = result["resolved"]["tool"]
+                parameters = result["resolved"]["parameters"]
+                
+                # Step 3: Execute the tool
+                success = await self.execute_tool(tool_name, parameters)
+                
+                response_data = {
+                    "success": success,
+                    "tool": tool_name,
+                    "parameters": parameters,
+                    "area": area,
+                    "extracted": False,
+                    "metadata": result.get("metadata", {})
+                }
+                
+                if use_respond:
+                    response_data["response"] = response_text
+                
+                return response_data
         
         except Exception as err:
             _LOGGER.error("Command failed: %s", err)
