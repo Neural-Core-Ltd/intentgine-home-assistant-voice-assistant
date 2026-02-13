@@ -61,7 +61,20 @@ class IntentgineAPIClient:
         data = {"query": query, "toolsets": toolsets}
         if persona:
             data["persona"] = persona
-        return await self._request("POST", "/v1/respond", data)
+        return await self._request("POST", "/v1/resolve-respond", data)
+    
+    async def classify_respond(self, data_text: str, classification_set: str = None, classes: list[dict] = None, context: str = None) -> dict:
+        """Classify text and generate conversational response."""
+        data = {"data": data_text}
+        if classification_set:
+            data["classification_set"] = classification_set
+        elif classes:
+            data["classes"] = classes
+        else:
+            raise ValueError("Either classification_set or classes must be provided")
+        if context:
+            data["context"] = context
+        return await self._request("POST", "/v1/classify-respond", data)
     
     async def create_toolset(self, name: str, signature: str, tools: list[dict], description: str = None) -> dict:
         """Create a toolset."""

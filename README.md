@@ -98,9 +98,15 @@ For a more conversational experience with natural language responses:
 type: custom:intentgine-chat-card
 title: Home Assistant Chat
 persona: friendly
-use_respond: true  # Enable natural language responses
+use_respond: true  # Enable natural language responses (resolve/respond)
+# OR
+use_classify_respond: true  # Enable chat-like responses (classify/respond)
 show_resolved_actions: true
 ```
+
+**Response Options**:
+- `use_respond: true` - Uses `/v1/resolve-respond` for tool resolution + natural language
+- `use_classify_respond: true` - Uses `/v1/classify-respond` for classification + chat-like responses (costs 2-4 requests)
 
 ### Conversation Agent (Coming Soon)
 

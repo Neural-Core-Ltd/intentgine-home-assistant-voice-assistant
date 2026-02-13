@@ -13,14 +13,18 @@ class CommandHandler:
         self.api_client = api_client
         self.toolset_manager = toolset_manager
     
-    async def handle_command(self, query: str, use_respond: bool = False):
+    async def handle_command(self, query: str, use_respond: bool = False, use_classify_respond: bool = False):
         """Process a natural language command with classification.
         
         Args:
             query: Natural language command
-            use_respond: If True, use respond endpoint for natural language responses.
-                        If False (default), use resolve endpoint for structured tool calls.
+            use_respond: If True, use resolve/respond endpoint for natural language responses.
+            use_classify_respond: If True, use classify/respond endpoint for chat-like responses.
         """
+        # If using classify/respond, handle it separately
+        if use_classify_respond:
+            return await self.handle_command_with_classify_respond(query)
+        
         try:
             # Step 1: Classify to determine area (1-2 requests depending on extraction)
             classification_result = await self.api_client.classify(
@@ -125,6 +129,51 @@ class CommandHandler:
         
         except Exception as err:
             _LOGGER.error("Command failed: %s", err)
+            return {"success": False, "error": str(err)}
+    
+    async def handle_command_with_classify_respond(self, query: str):
+        """Process command using classify/respond endpoint for chat-like responses."""
+        try:
+            # Use classify/respond endpoint (2-4 requests depending on extraction)
+            result = await self.api_client.classify_respond(
+                query,
+                classification_set="area-router-v1",
+                context="Home Assistant voice command routing"
+            )
+            
+            response_text = result.get("response", "")
+            classifications = result.get("classifications", [])
+            
+            # Execute tools for each classification
+            results = []
+            for classification in classifications:
+                area = classification["label"]
+                toolset_signature = f"{area}-v1" if area != "global" else "global-v1"
+                
+                # Resolve the specific command for this area
+                resolve_result = await self.api_client.resolve(query, [toolset_signature])
+                tool_name = resolve_result["resolved"]["tool"]
+                parameters = resolve_result["resolved"]["parameters"]
+                
+                # Execute the tool
+                success = await self.execute_tool(tool_name, parameters)
+                
+                results.append({
+                    "success": success,
+                    "tool": tool_name,
+                    "parameters": parameters,
+                    "area": area
+                })
+            
+            return {
+                "success": all(r["success"] for r in results),
+                "response": response_text,
+                "results": results,
+                "metadata": result.get("metadata", {})
+            }
+        
+        except Exception as err:
+            _LOGGER.error("Classify/respond command failed: %s", err)
             return {"success": False, "error": str(err)}
     
     async def execute_tool(self, tool_name: str, parameters: dict):
