@@ -4,82 +4,89 @@ Control your Home Assistant devices using natural language powered by [Intentgin
 
 ## What is This?
 
-This is a custom Home Assistant integration that lets you control your smart home devices using natural language commands. Instead of remembering exact entity names and service calls, just type what you want:
+A custom Home Assistant integration that lets you control smart home devices with natural language commands. Instead of remembering entity names and service calls, just say what you want:
 
 - "Turn on the living room lights"
 - "Set bedroom temperature to 72"
 - "Activate movie time scene"
-- "Dim the kitchen lights to 50%"
+- "Turn on kitchen lights and turn off bedroom lights"
 
-The integration uses Intentgine's Intent-as-a-Service API to understand your commands and map them to the correct Home Assistant actions.
-
-## Features
-
-- 🗣️ **Natural Language Control**: Type commands in plain English
-- 🏠 **Area-Based Organization**: Automatically organizes devices by room
-- 🔄 **Auto-Sync**: Keeps up with your Home Assistant configuration changes
-- 🔒 **Secure**: Only controls entities you've exposed to voice assistants
-- 💬 **Conversational**: Optional chat interface with natural responses
-- 🎯 **Accurate**: Learns from corrections to improve over time
+The integration uses Intentgine's Intent-as-a-Service API to understand your commands and map them to Home Assistant service calls.
 
 ## Requirements
 
 - Home Assistant 2024.1 or newer
-- Active [Intentgine](https://intentgine.dev) subscription
-- Intentgine API key
+- An [Intentgine](https://intentgine.dev) account with an active subscription
+- An Intentgine API key (from your app in the Intentgine console)
 
 ## Installation
 
 ### Via HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Click "Integrations"
-3. Click the three dots in the top right
-4. Select "Custom repositories"
-5. Add this repository URL
-6. Click "Install"
-7. Restart Home Assistant
+2. Click **Integrations**
+3. Click the three dots menu → **Custom repositories**
+4. Add this repository URL and select **Integration** as the category
+5. Click **Install**
+6. Restart Home Assistant
 
 ### Manual Installation
 
-1. Download the latest release
-2. Copy `custom_components/intentgine/` to your Home Assistant `config/custom_components/` directory
-3. Restart Home Assistant
+1. Copy the `custom_components/intentgine/` folder into your Home Assistant `config/custom_components/` directory
+2. Restart Home Assistant
 
-## Configuration
+## Setup
 
-### 1. Get Your Intentgine API Key
+### Step 1: Get Your API Key
 
 1. Sign up at [intentgine.dev](https://intentgine.dev)
-2. Create a new App in the dashboard
-3. Copy your API key (starts with `sk_live_`)
+2. Create a new App in the console
+3. Copy your API key from the app settings
 
-### 2. Add the Integration
+### Step 2: Add the Integration
 
 1. Go to **Settings** → **Devices & Services**
 2. Click **Add Integration**
-3. Search for "Intentgine"
-4. Enter your API key
-5. Click **Submit**
+3. Search for **Intentgine**
+4. Paste your API key
+5. (Optional) Change the API endpoint if you're self-hosting
+6. Click **Submit**
 
-The integration will automatically:
-- Discover all entities exposed to voice assistants
-- Create toolsets organized by area
-- Sync with Intentgine API
+On first setup, the integration will:
+- Exchange your API key for a JWT (used for all subsequent API calls)
+- Discover all entities you've exposed to voice assistants
+- Create toolsets organized by area on the Intentgine API
+- Create a classification set for area-based command routing
+- Register as a Home Assistant conversation agent
 
-### 3. Expose Entities (Optional)
+### Step 3: Expose Entities
 
-By default, only entities already exposed to voice assistants can be controlled. To expose more:
+The integration can only control entities that are exposed to voice assistants. To expose entities:
 
 1. Go to **Settings** → **Voice Assistants** → **Expose**
-2. Select entities you want to control via Intentgine
-3. The integration will auto-sync within a few minutes
+2. Toggle on the entities you want to control via Intentgine
+3. Run a manual sync: **Developer Tools** → **Services** → `intentgine.sync_toolsets`
+
+### Step 4: Register Lovelace Cards (Optional)
+
+The integration automatically serves its frontend files at `/intentgine/`. To use the dashboard cards, register them as Lovelace resources:
+
+1. Go to **Settings** → **Dashboards** → **Resources** (three dots menu)
+2. Add the following resources with type **JavaScript Module**:
+   - `/intentgine/intentgine-command-card.js`
+   - `/intentgine/intentgine-chat-card.js`
 
 ## Usage
 
-### Dashboard Card
+### Conversation Agent
 
-Add the Intentgine command card to your dashboard:
+The integration registers as a Home Assistant conversation agent. You can select it in **Settings** → **Voice Assistants** to use it with Home Assistant's built-in Assist pipeline, or any voice input method.
+
+When used as a conversation agent, commands go through the classify → resolve → execute pipeline automatically.
+
+### Command Card
+
+Add a simple command input to your dashboard:
 
 ```yaml
 type: custom:intentgine-command-card
@@ -88,29 +95,77 @@ placeholder: "What would you like to do?"
 show_history: true
 ```
 
-Then just type commands and click "Run"!
+Type a command and click **Run**. The card shows success/error feedback and optionally keeps a history of the last 5 commands.
 
-### Chat Interface (Advanced)
+### Chat Card
 
-For a more conversational experience with natural language responses:
+Add a chat-style interface:
 
 ```yaml
 type: custom:intentgine-chat-card
 title: Home Assistant Chat
-persona: friendly
-use_respond: true  # Enable natural language responses (resolve/respond)
-# OR
-use_classify_respond: true  # Enable chat-like responses (classify/respond)
-show_resolved_actions: true
 ```
 
-**Response Options**:
-- `use_respond: true` - Uses `/v1/resolve-respond` for tool resolution + natural language
-- `use_classify_respond: true` - Uses `/v1/classify-respond` for classification + chat-like responses (costs 2-4 requests)
+Type messages and get feedback on executed commands.
 
-### Conversation Agent (Coming Soon)
+### Services
 
-Integration with Home Assistant's built-in voice assistant system.
+The integration exposes two services you can call from automations, scripts, or Developer Tools:
+
+**`intentgine.execute_command`** — Execute a natural language command
+```yaml
+service: intentgine.execute_command
+data:
+  query: "Turn on the living room lights"
+```
+
+**`intentgine.sync_toolsets`** — Re-sync entities with Intentgine
+```yaml
+service: intentgine.sync_toolsets
+```
+
+## Supported Devices
+
+The integration generates tools for these entity domains:
+
+| Domain | Tool Name | Actions | Extra Parameters |
+|--------|-----------|---------|-----------------|
+| `light` | `control_light` | turn_on, turn_off, toggle | brightness (0-255), color_temp |
+| `switch` | `control_switch` | turn_on, turn_off, toggle | — |
+| `climate` | `control_climate` | *(inferred from params)* | temperature, hvac_mode |
+| `cover` | `control_cover` | open, close, stop, toggle | position (0-100) |
+| `scene` | `activate_scene` | *(always turn_on)* | — |
+
+Climate devices don't require an explicit action — the integration infers `set_temperature` or `set_hvac_mode` from the parameters the API returns.
+
+## How It Works
+
+```
+User command
+    ↓
+1. Classify (POST /v1/classify)
+   → Determines which area(s) the command targets
+   → Multi-intent commands are automatically split via extraction
+    ↓
+2. Resolve (POST /v1/resolve) — one per area
+   → Maps the command to a specific tool + parameters
+    ↓
+3. Execute (hass.services.async_call)
+   → Calls the Home Assistant service
+    ↓
+4. Response
+   → Success/error feedback to the user
+```
+
+**Area-based routing**: The integration creates one toolset per area (e.g., `ha-living_room-v1`, `ha-bedroom-v1`) plus a global toolset (`ha-global-v1`) for entities without an area. A classification set (`ha-area-router-v1`) routes commands to the correct area's toolset.
+
+**Multi-intent extraction**: The classification set has extraction enabled, so commands like "turn on kitchen lights and turn off bedroom lights" are automatically split into separate commands, each routed to the correct area.
+
+**Cost per command**:
+- Single-intent: 2 requests (1 classify + 1 resolve)
+- Multi-intent: 2 + N requests (1 classify with extraction + N resolves)
+
+**Authentication**: The API key is exchanged for a short-lived JWT via `POST /v1/auth`. The JWT is cached and auto-refreshed before expiry. All subsequent API calls use the JWT.
 
 ## Example Commands
 
@@ -118,13 +173,6 @@ Integration with Home Assistant's built-in voice assistant system.
 - "Turn on the living room lights"
 - "Turn off all bedroom lights"
 - "Set kitchen lights to 50%"
-- "Make the lights warmer"
-- "Change living room to blue"
-
-### Multi-Intent Commands
-- "Turn on kitchen lights and turn off bedroom lights"
-- "Set living room to 50% and turn on bedroom lights"
-- "Open garage door and turn on driveway lights"
 
 ### Climate
 - "Set bedroom temperature to 72"
@@ -139,177 +187,77 @@ Integration with Home Assistant's built-in voice assistant system.
 - "Open the garage door"
 - "Close bedroom blinds"
 
-### Media
-- "Play music in the living room"
-- "Pause the TV"
-
-## How It Works
-
-1. **You type a command** in natural language
-2. **Integration classifies** the command to determine the area (living room, bedroom, etc.)
-   - If the command contains multiple intents (e.g., "turn on kitchen and bedroom lights"), extraction automatically splits it into separate commands
-3. **Integration sends to Intentgine** with the area-specific toolset for each command
-4. **Intentgine resolves** each command to a specific action with parameters
-5. **Integration executes** all Home Assistant service calls
-6. **You get feedback** on success or errors
-
-The integration automatically creates "toolsets" (collections of available actions) organized by area. Each toolset contains domain-based tools (one tool for all lights, one for all switches, etc.) with parameters to specify which device and what action. When you add or remove devices, it syncs automatically.
-
-**Classification Extraction**: The area router classification set has extraction enabled, which means it can automatically detect and split multi-intent commands like "turn on kitchen lights and turn off bedroom lights" into separate commands. This happens in a single API call with minimal overhead.
-
-**Cost per command**:
-- Single-intent: 2 requests (1 classify + 1 resolve)
-- Multi-intent: 2 + N requests (2 for classify with extraction + N resolves, where N = number of intents)
-
-## Configuration Options
-
-Access via **Settings** → **Devices & Services** → **Intentgine** → **Configure**:
-
-- **API Endpoint**: Custom endpoint (for self-hosted Intentgine)
-- **Sync Frequency**: How often to sync toolsets (hourly, daily, manual)
-- **Area Toolsets**: Enable/disable area-based organization
-- **Default Persona**: Conversational style for responses
+### Multi-Intent
+- "Turn on kitchen lights and turn off bedroom lights"
+- "Set living room to 50% and turn on bedroom lights"
 
 ## Troubleshooting
 
-### "I don't understand that command"
+### "Cannot connect" during setup
 
-- Make sure the entity is exposed to voice assistants
-- Try being more specific (include room name)
-- Check that the device is available in Home Assistant
+- Verify your API key in the Intentgine console
+- Check that your Home Assistant instance has internet access
+- If self-hosting, verify the endpoint URL is correct
 
-### "API key invalid"
+### Commands don't work for a device
 
-- Verify your API key in the Intentgine dashboard
-- Make sure it starts with `sk_live_`
-- Try reconfiguring the integration
+- Confirm the entity is exposed: **Settings** → **Voice Assistants** → **Expose**
+- Run a manual sync: **Developer Tools** → **Services** → `intentgine.sync_toolsets`
+- Check the entity's domain is supported (see Supported Devices table above)
 
-### "Out of requests"
+### "Insufficient requests remaining"
 
-- Check your Intentgine plan limits
-- Upgrade your plan or wait for reset
-- View usage in the Intentgine dashboard
+- Check your usage in the Intentgine console
+- Upgrade your plan or wait for the billing cycle to reset
 
 ### Commands are slow
 
-- First command after sync may be slower (cache miss)
-- Subsequent similar commands should be faster (cached)
+- First command after a sync may be slower (cold cache)
+- Subsequent similar commands are faster (Intentgine caches semantically)
 - Check your internet connection
 
-### Entities not syncing
+### Entities not appearing after adding new devices
 
-- Trigger manual sync: **Developer Tools** → **Services** → `intentgine.sync_toolsets`
-- Check entity is exposed to voice assistants
-- Check integration logs for errors
+Run a manual sync:
+1. **Developer Tools** → **Services**
+2. Select `intentgine.sync_toolsets`
+3. Click **Call Service**
 
-## Advanced Usage
+Or restart the integration — it syncs on startup.
 
-### Memory Banks
+### Check logs for errors
 
-The integration can learn from corrections:
+Go to **Settings** → **System** → **Logs** and filter for `intentgine`.
 
-1. When a command doesn't work as expected, use the correction UI
-2. The integration sends the correction to Intentgine
-3. Future similar commands will work better
-
-### Custom Toolsets
-
-For advanced users, you can customize toolset generation in the integration options.
-
-### API Usage Monitoring
-
-View your Intentgine API usage:
-- Integration shows remaining requests
-- Warns when approaching limit
-- Links to Intentgine dashboard for details
-
-## Development
-
-This integration is open source! Contributions welcome.
-
-### Setup Development Environment
-
-```bash
-# Clone repository
-git clone https://github.com/intentgine/ha-integration
-cd ha-integration
-
-# Install dependencies
-pip install -r requirements_dev.txt
-
-# Run tests
-pytest tests/
-
-# Lint code
-pylint custom_components/intentgine/
-black custom_components/intentgine/
-```
-
-### Project Structure
+## Project Structure
 
 ```
 custom_components/intentgine/
-├── __init__.py              # Integration entry point
-├── manifest.json            # Integration metadata
-├── config_flow.py           # Configuration UI
-├── const.py                 # Constants
-├── api_client.py            # Intentgine API client
-├── toolset_manager.py       # Toolset generation & sync
-├── command_handler.py       # Command processing
-├── conversation.py          # Conversation agent
-└── lovelace/                # Frontend cards
-    ├── intentgine-command-card.js
-    └── intentgine-chat-card.js
+├── __init__.py           # Integration setup, service registration
+├── manifest.json         # Integration metadata
+├── config_flow.py        # Setup & options UI
+├── const.py              # Constants (domain, defaults, prefixes)
+├── api_client.py         # Intentgine API client (JWT auth, CRUD)
+├── toolset_manager.py    # Entity discovery, toolset generation & sync
+├── command_handler.py    # Classify → resolve → execute pipeline
+├── conversation.py       # HA conversation agent integration
+├── services.yaml         # Service definitions
+├── strings.json          # UI strings
+├── translations/
+│   └── en.json           # English translations
+└── www/
+    ├── intentgine-command-card.js   # Simple command card
+    └── intentgine-chat-card.js      # Chat interface card
 ```
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
-
-## Support
-
-- **Documentation**: [Full docs](docs/)
-- **Issues**: [GitHub Issues](https://github.com/intentgine/ha-integration/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/intentgine/ha-integration/discussions)
-- **Intentgine Support**: [support@intentgine.dev](mailto:support@intentgine.dev)
-
-## Pricing
-
-This integration is **free and open source**. However, it requires an Intentgine subscription:
-
-- **Hobbyist**: $5/mo - 10,000 requests (~5,000 single commands or ~2,500 two-intent commands)
-- **Starter**: $29/mo - 100,000 requests (~50,000 single commands or ~25,000 two-intent commands)
-- **Business**: $99/mo - 500,000 requests (~250,000 single commands or ~125,000 two-intent commands)
-
-See [intentgine.dev/pricing](https://intentgine.dev/pricing) for current pricing.
-
-**Request usage per command**:
-- Single-intent command: **2 requests** (1 classify + 1 resolve)
-- Multi-intent command: **2 + N requests** (2 for classify with extraction + N resolves)
-  - Example: "Turn on kitchen and bedroom lights" = 4 requests (2 classify + 2 resolves)
-
-**Recommendation**: Most users should start with **Starter ($29/mo)** for typical home setups.
 
 ## Privacy & Security
 
-- Your API key is stored securely in Home Assistant
-- Commands are sent to Intentgine API over HTTPS
-- Only entities you expose can be controlled
-- No data is stored by this integration (Intentgine may cache for performance)
-- See [Intentgine Privacy Policy](https://intentgine.dev/privacy)
+- Your API key is stored in Home Assistant's config entry storage
+- The API key is exchanged for a short-lived JWT — the raw key is only sent to `/v1/auth`
+- All API communication is over HTTPS
+- Only entities you explicitly expose to voice assistants can be controlled
+- No data is stored locally by this integration beyond configuration
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Credits
-
-Built by the [Intentgine](https://intentgine.dev) team as a reference implementation and community contribution.
-
-Special thanks to the Home Assistant community for their excellent documentation and examples.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
----
-
-**Note**: This integration is currently in development. See [IMPLEMENTATION.md](IMPLEMENTATION.md) for current status and roadmap.
+MIT License — see [LICENSE](LICENSE) for details.
