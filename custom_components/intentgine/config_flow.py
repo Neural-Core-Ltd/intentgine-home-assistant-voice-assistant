@@ -84,17 +84,29 @@ class IntentgineOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         """Initialize options flow."""
         self.config_entry = config_entry
+        _LOGGER.debug(
+            "IntentgineOptionsFlow.__init__ called with entry: %s",
+            config_entry.entry_id,
+        )
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        _LOGGER.debug("async_step_init called with user_input: %s", user_input)
+        try:
+            if user_input is not None:
+                return self.async_create_entry(title="", data=user_input)
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional("enable_area_toolsets", default=True): bool,
-                }
-            ),
-        )
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional("enable_area_toolsets", default=True): bool,
+                    }
+                ),
+            )
+        except Exception as err:
+            _LOGGER.error("Options flow error: %s", err)
+            import traceback
+
+            _LOGGER.error("Traceback: %s", traceback.format_exc())
+            raise
