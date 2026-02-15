@@ -1,26 +1,70 @@
-"""Conversation agent for Intentgine."""
+"""Conversation entity for Intentgine."""
 
 import logging
+from typing import Literal
+
 from homeassistant.components import conversation
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class IntentgineConversationAgent(conversation.AbstractConversationAgent):
-    """Intentgine conversation agent."""
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up conversation entities."""
+    async_add_entities([IntentgineConversationEntity(hass, config_entry)])
 
-    def __init__(self, hass, entry):
-        """Initialize the agent."""
+
+class IntentgineConversationEntity(
+    conversation.ConversationEntity,
+    conversation.AbstractConversationAgent,
+):
+    """Intentgine conversation agent entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None  # Use device name
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the entity."""
         self.hass = hass
         self.entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_conversation"
 
     @property
-    def attribution(self):
-        """Return attribution."""
-        return {"name": "Intentgine", "url": "https://intentgine.dev"}
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": "Intentgine",
+            "manufacturer": "Intentgine",
+            "model": "Voice Control",
+            "entry_type": "service",
+        }
+
+    @property
+    def supported_languages(self) -> list[str] | Literal["*"]:
+        """Return supported languages."""
+        return ["en"]
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+        conversation.async_set_agent(self.hass, self.entry, self)
+        _LOGGER.info("Intentgine conversation agent registered")
+
+    async def async_will_remove_from_hass(self) -> None:
+        """When entity will be removed from Home Assistant."""
+        conversation.async_unset_agent(self.hass, self.entry)
+        await super().async_will_remove_from_hass()
+        _LOGGER.info("Intentgine conversation agent unregistered")
 
     async def async_process(
         self, user_input: conversation.ConversationInput
@@ -57,15 +101,3 @@ class IntentgineConversationAgent(conversation.AbstractConversationAgent):
             return conversation.ConversationResult(
                 response=intent_response, conversation_id=user_input.conversation_id
             )
-
-    @property
-    def supported_languages(self):
-        """Return supported languages."""
-        return ["en"]
-
-
-async def async_setup_conversation_agent(hass, entry):
-    """Set up the conversation agent."""
-    agent = IntentgineConversationAgent(hass, entry)
-    conversation.async_set_agent(hass, entry, agent)
-    return True

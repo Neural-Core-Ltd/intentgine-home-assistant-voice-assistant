@@ -4,6 +4,7 @@ import logging
 import os
 import traceback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -11,10 +12,10 @@ from .const import DOMAIN
 from .api_client import IntentgineAPIClient
 from .toolset_manager import ToolsetManager
 from .command_handler import CommandHandler
-from .conversation import async_setup_conversation_agent
 
 _LOGGER = logging.getLogger(__name__)
 
+PLATFORMS = [Platform.CONVERSATION]
 FRONTEND_REGISTERED = False
 
 
@@ -39,8 +40,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("Registering frontend...")
             www_path = os.path.join(os.path.dirname(__file__), "www")
             if os.path.isdir(www_path):
-                hass.http.register_static_path(
-                    f"/intentgine", www_path, cache_headers=True
+                from homeassistant.components.http import StaticPathConfig
+
+                await hass.http.async_register_static_paths(
+                    [StaticPathConfig("/intentgine", www_path, cache_headers=True)]
                 )
                 _LOGGER.debug("Registered frontend static path: /intentgine")
             FRONTEND_REGISTERED = True
@@ -82,14 +85,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("Initial toolset sync failed (will retry later): %s", err)
             _write_error(f"Toolset sync failed: {err}\n{traceback.format_exc()}")
 
-        # Set up conversation agent
-        _LOGGER.info("Setting up conversation agent...")
-        try:
-            await async_setup_conversation_agent(hass, entry)
-            _LOGGER.info("Conversation agent registered")
-        except Exception as err:
-            _LOGGER.warning("Could not register conversation agent: %s", err)
-            _write_error(f"Conversation agent failed: {err}\n{traceback.format_exc()}")
+        # Forward to platforms (conversation entity will be set up)
+        _LOGGER.info("Forwarding to platforms...")
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        _LOGGER.info("Platforms forwarded")
 
         # Register services
         _LOGGER.info("Registering services...")
@@ -124,15 +123,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Unregister services
-    hass.services.async_remove(DOMAIN, "execute_command")
-    hass.services.async_remove(DOMAIN, "sync_toolsets")
+    # Unload platforms first
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Close API client session
-    api_client = hass.data[DOMAIN][entry.entry_id]["api_client"]
-    await api_client.close()
+    if unload_ok:
+        # Unregister services
+        hass.services.async_remove(DOMAIN, "execute_command")
+        hass.services.async_remove(DOMAIN, "sync_toolsets")
 
-    # Remove data
-    hass.data[DOMAIN].pop(entry.entry_id)
+        # Close API client session
+        api_client = hass.data[DOMAIN][entry.entry_id]["api_client"]
+        await api_client.close()
 
-    return True
+        # Remove data
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok
