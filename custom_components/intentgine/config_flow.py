@@ -1,4 +1,5 @@
 """Config flow for Intentgine integration."""
+
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
@@ -9,24 +10,24 @@ from .api_client import IntentgineAPIClient
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class IntentgineConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Intentgine."""
-    
+
     VERSION = 1
-    
+
     def __init__(self):
         """Initialize the config flow."""
         self._last_error = None
-    
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
-        description_placeholders = {}
-        
+
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
             endpoint = user_input.get(CONF_ENDPOINT, DEFAULT_ENDPOINT)
-            
+
             # Test API connection
             try:
                 _LOGGER.info("Testing connection to %s", endpoint)
@@ -35,53 +36,28 @@ class IntentgineConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await client.list_toolsets()
                 _LOGGER.info("list_toolsets succeeded!")
                 await client.close()
-                
+
                 return self.async_create_entry(
                     title="Intentgine",
                     data={
                         CONF_API_KEY: api_key,
                         CONF_ENDPOINT: endpoint,
-                    }
+                    },
                 )
             except Exception as err:
                 _LOGGER.error("Failed to connect: %s", err)
                 import traceback
+
                 tb = traceback.format_exc()
                 _LOGGER.error("Traceback: %s", tb)
                 errors["base"] = "cannot_connect"
-                # Pass error details to description
-                description_placeholders["error_details"] = str(err)
                 self._last_error = str(err)
-                # Also write to a file for easy debugging
+                # Write to a file for easy debugging
                 try:
                     with open("/config/intentgine_error.txt", "w") as f:
                         f.write(f"Error: {err}\n\nTraceback:\n{tb}")
                 except:
                     pass
-        
-        # Build description with error if present
-        description = "Enter your Intentgine API credentials"
-        if self._last_error:
-            description = f"Enter your Intentgine API credentials\n\n**Error:** {self._last_error}"
-        
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_API_KEY): str,
-                vol.Optional(CONF_ENDPOINT, default=DEFAULT_ENDPOINT): str,
-            }),
-            errors=errors,
-            description_placeholders={"error_details": self._last_error or ""},
-        )
-            except Exception as err:
-                _LOGGER.error("Failed to connect: %s", err)
-                import traceback
-
-                _LOGGER.error("Traceback: %s", traceback.format_exc())
-                # Show the actual error in the UI for debugging
-                errors["base"] = "cannot_connect"
-                # Store error for display
-                self._last_error = str(err)
 
         return self.async_show_form(
             step_id="user",
@@ -92,6 +68,7 @@ class IntentgineConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders={"error_details": self._last_error or ""},
         )
 
     @staticmethod
