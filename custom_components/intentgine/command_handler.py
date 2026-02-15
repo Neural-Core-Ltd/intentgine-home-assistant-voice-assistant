@@ -25,6 +25,9 @@ class CommandHandler:
             use_respond: If True, use resolve/respond endpoint for natural language responses.
             use_classify_respond: If True, use classify/respond endpoint for chat-like responses.
         """
+        # Ensure toolsets are synced (lazy refresh if stale)
+        await self.toolset_manager.ensure_synced()
+
         # If using classify/respond, handle it separately
         if use_classify_respond:
             return await self.handle_command_with_classify_respond(query)

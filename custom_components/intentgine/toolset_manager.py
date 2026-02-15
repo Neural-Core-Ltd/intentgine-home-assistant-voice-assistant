@@ -1,12 +1,16 @@
 """Toolset manager for Intentgine integration."""
 
 import logging
+import time
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, area_registry as ar
 
 from .const import TOOLSET_PREFIX, TOOLSET_VERSION, TOOLSET_GLOBAL
 
 _LOGGER = logging.getLogger(__name__)
+
+# Sync every 30 minutes by default
+SYNC_INTERVAL_SECONDS = 30 * 60
 
 
 class ToolsetManager:
@@ -17,6 +21,8 @@ class ToolsetManager:
         self.hass = hass
         self.api_client = api_client
         self.toolsets = {}
+        self._last_sync: float = 0
+        self._syncing: bool = False
 
     def get_exposed_entities(self):
         """Get all entities exposed to voice assistants."""
@@ -212,6 +218,25 @@ class ToolsetManager:
         return tools
 
     async def sync_all(self):
+        """Sync all toolsets and classification set."""
+        self._syncing = True
+        try:
+            await self._do_sync()
+            self._last_sync = time.time()
+        finally:
+            self._syncing = False
+
+    async def ensure_synced(self):
+        """Ensure toolsets are synced, refreshing if stale."""
+        if self._syncing:
+            return  # Already syncing
+
+        elapsed = time.time() - self._last_sync
+        if elapsed > SYNC_INTERVAL_SECONDS:
+            _LOGGER.info("Toolsets stale (%.0f min old), refreshing...", elapsed / 60)
+            await self.sync_all()
+
+    async def _do_sync(self):
         """Sync all toolsets and classification set."""
         _LOGGER.info("Starting toolset sync")
 
