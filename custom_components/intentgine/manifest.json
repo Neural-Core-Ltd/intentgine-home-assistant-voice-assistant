@@ -3,6 +3,7 @@
   "name": "Intentgine Voice Control",
   "documentation": "https://github.com/intentgine/ha-integration",
   "requirements": ["aiohttp>=3.8.0"],
+  "dependencies": ["conversation"],
   "codeowners": ["@intentgine"],
   "config_flow": true,
   "integration_type": "service",
