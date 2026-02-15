@@ -22,12 +22,26 @@ class IntentgineAPIClient:
     async def _get_session(self):
         """Get or create aiohttp session."""
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            # Use a more permissive SSL context and explicit timeout
+            import ssl
+
+            ssl_context = ssl.create_default_context()
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            timeout = aiohttp.ClientTimeout(total=30)
+            self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
+            _LOGGER.info("Created new aiohttp session for endpoint: %s", self.endpoint)
         return self.session
 
     async def _ensure_token(self):
         """Exchange API key for JWT if needed."""
+        _LOGGER.debug(
+            "_ensure_token called, current token: %s, expires: %s, now: %s",
+            bool(self._jwt_token),
+            self._jwt_expires_at,
+            time.time(),
+        )
         if self._jwt_token and time.time() < self._jwt_expires_at - 30:
+            _LOGGER.debug("Token still valid, reusing")
             return
 
         session = await self._get_session()
@@ -36,9 +50,14 @@ class IntentgineAPIClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        _LOGGER.info("Exchanging API key for JWT at %s", url)
 
         try:
-            async with session.post(url, headers=headers) as resp:
+            _LOGGER.info("About to POST to %s", url)
+            async with session.post(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                _LOGGER.info("Auth response status: %s", resp.status)
                 if resp.status == 401:
                     raise Exception("Invalid API key")
                 if resp.status >= 400:
@@ -52,17 +71,25 @@ class IntentgineAPIClient:
                 self._jwt_expires_at = datetime.fromisoformat(
                     data["expires_at"].replace("Z", "+00:00")
                 ).timestamp()
+                _LOGGER.debug("JWT obtained, expires at %s", data["expires_at"])
         except aiohttp.ClientError as err:
+            _LOGGER.error("Connection error during auth: %s", err)
             raise Exception(f"Connection error during auth: {err}")
 
     async def _request(self, method: str, path: str, data: dict = None) -> dict:
         """Make authenticated API request."""
+        _LOGGER.debug("_request called: %s %s", method, path)
         await self._ensure_token()
         session = await self._get_session()
         url = f"{self.endpoint}{path}"
         headers = {
             "Authorization": f"Bearer {self._jwt_token}",
         }
+        _LOGGER.debug(
+            "Making request to %s with token: %s...",
+            url,
+            self._jwt_token[:20] if self._jwt_token else None,
+        )
 
         kwargs = {}
         if data is not None:
@@ -162,7 +189,14 @@ class IntentgineAPIClient:
 
     async def list_toolsets(self) -> list[dict]:
         """List all toolsets."""
-        return await self._request("GET", "/v1/toolsets")
+        _LOGGER.info("list_toolsets() called - starting request flow")
+        try:
+            result = await self._request("GET", "/v1/toolsets")
+            _LOGGER.info("list_toolsets() completed successfully")
+            return result
+        except Exception as e:
+            _LOGGER.error("list_toolsets() failed: %s", e)
+            raise
 
     async def create_classification_set(
         self,

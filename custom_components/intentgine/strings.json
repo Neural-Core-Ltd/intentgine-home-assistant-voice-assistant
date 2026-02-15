@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up Intentgine",
-        "description": "Enter your Intentgine API credentials",
+        "description": "Enter your Intentgine API credentials\n\n{error_details}",
         "data": {
           "api_key": "API Key",
           "endpoint": "API Endpoint"
