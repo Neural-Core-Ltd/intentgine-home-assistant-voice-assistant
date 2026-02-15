@@ -42,8 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "command_handler": command_handler,
     }
 
-    # Initial sync
-    await toolset_manager.sync_all()
+    # Initial sync - non-blocking, errors logged but don't fail setup
+    try:
+        await toolset_manager.sync_all()
+    except Exception as err:
+        _LOGGER.warning("Initial toolset sync failed (will retry later): %s", err)
 
     # Set up conversation agent
     try:
