@@ -42,22 +42,8 @@ class IntentgineChatCard extends HTMLElement {
         button.disabled = true;
         
         try {
-          const toolsets = await this._getToolsets();
-          const response = await this._hass.callWS({
-            type: 'intentgine/respond',
-            query: query,
-            toolsets: toolsets,
-            persona: this._config.persona
-          });
-          
-          if (response.response && response.response.text) {
-            this._addMessage('assistant', response.response.text);
-          }
-          
-          if (response.resolved) {
-            await this._hass.callService('intentgine', 'execute_command', { query });
-            this._addMessage('action', `✓ ${response.resolved.tool}`);
-          }
+          await this._hass.callService('intentgine', 'execute_command', { query });
+          this._addMessage('action', `✓ Command executed`);
         } catch (err) {
           this._addMessage('assistant', `Error: ${err.message}`);
         }
@@ -79,11 +65,6 @@ class IntentgineChatCard extends HTMLElement {
     msg.textContent = text;
     messages.appendChild(msg);
     messages.scrollTop = messages.scrollHeight;
-  }
-  
-  async _getToolsets() {
-    // Get toolsets from integration data
-    return ['ha-global-v1'];
   }
   
   set hass(hass) {
