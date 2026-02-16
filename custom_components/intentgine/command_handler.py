@@ -1,7 +1,10 @@
 """Command handler for Intentgine integration."""
 
 import logging
+import time
 from homeassistant.core import HomeAssistant
+
+from .const import CORRECTION_WINDOW_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,6 +17,89 @@ class CommandHandler:
         self.hass = hass
         self.api_client = api_client
         self.toolset_manager = toolset_manager
+        self._last_command: dict | None = None
+
+    def _get_banks(self) -> list[str] | None:
+        """Get correction bank list if available."""
+        bank_id = self.toolset_manager.correction_bank_id
+        return [bank_id] if bank_id else None
+
+    def _save_last_command(self, query: str, tool: str, parameters: dict, area: str):
+        """Save command to rolling window for correction detection."""
+        self._last_command = {
+            "query": query,
+            "tool": tool,
+            "parameters": parameters,
+            "area": area,
+            "timestamp": time.time(),
+        }
+
+    def _has_recent_command(self) -> bool:
+        """Check if there's a recent command within the correction window."""
+        if not self._last_command:
+            return False
+        return (
+            time.time() - self._last_command["timestamp"]
+        ) < CORRECTION_WINDOW_SECONDS
+
+    async def _handle_correction(self, query: str, use_respond: bool = False):
+        """Handle a correction by re-resolving with context and saving to memory bank."""
+        prev = self._last_command
+        bank_id = self.toolset_manager.correction_bank_id
+
+        # Re-resolve the original query + correction as context, using the same area toolset
+        toolset_signature = (
+            f"ha-{prev['area']}-v1" if prev["area"] != "global" else "ha-global-v1"
+        )
+
+        # Build a combined query: original intent + correction hint
+        corrected_query = f"{prev['query']} (correction: {query})"
+
+        if use_respond:
+            result = await self.api_client.respond(corrected_query, [toolset_signature])
+            response_text = result.get("response", {}).get("text", "")
+        else:
+            result = await self.api_client.resolve(
+                corrected_query, [toolset_signature], banks=self._get_banks()
+            )
+
+        tool_name = result["resolved"]["tool"]
+        parameters = result["resolved"]["parameters"]
+
+        # Execute the corrected tool
+        success = await self.execute_tool(tool_name, parameters)
+
+        # Fire correction to memory bank (original query → correct tool/params)
+        if bank_id:
+            try:
+                await self.api_client.correct(
+                    query=prev["query"],
+                    correct_tool=tool_name,
+                    target_bank=bank_id,
+                    correct_params=parameters,
+                )
+                _LOGGER.info("Correction saved: '%s' → %s", prev["query"], tool_name)
+            except Exception as err:
+                _LOGGER.warning("Failed to save correction: %s", err)
+
+        # Update rolling window with corrected command
+        self._save_last_command(prev["query"], tool_name, parameters, prev["area"])
+
+        response_data = {
+            "success": success,
+            "tool": tool_name,
+            "parameters": parameters,
+            "area": prev["area"],
+            "corrected": True,
+            "original_tool": prev["tool"],
+            "extracted": False,
+            "metadata": result.get("metadata", {}),
+        }
+
+        if use_respond:
+            response_data["response"] = response_text
+
+        return response_data
 
     async def handle_command(
         self, query: str, use_respond: bool = False, use_classify_respond: bool = False
@@ -41,6 +127,20 @@ class CommandHandler:
             )
 
             result_data = classification_result["results"][0]
+            area = result_data["classification"]
+
+            # Check for correction classification
+            if area == "correction" and self._has_recent_command():
+                _LOGGER.info("Correction detected for previous command")
+                return await self._handle_correction(query, use_respond)
+            elif area == "correction":
+                _LOGGER.info("Correction detected but no recent command to correct")
+                return {
+                    "success": False,
+                    "error": "Nothing to correct. No recent command found.",
+                }
+
+            banks = self._get_banks()
 
             # Check if extraction was performed
             if result_data.get("extracted"):
@@ -53,13 +153,12 @@ class CommandHandler:
 
                 for extracted in result_data["extracted"]:
                     sub_query = extracted["query"]
-                    area = extracted["classification"]
+                    sub_area = extracted["classification"]
                     toolset_signature = (
-                        f"ha-{area}-v1" if area != "global" else "ha-global-v1"
+                        f"ha-{sub_area}-v1" if sub_area != "global" else "ha-global-v1"
                     )
 
                     if use_respond:
-                        # Use respond endpoint for natural language response
                         respond_result = await self.api_client.respond(
                             sub_query, [toolset_signature]
                         )
@@ -70,14 +169,12 @@ class CommandHandler:
                         )
                         responses.append(response_text)
                     else:
-                        # Use resolve endpoint for structured tool call
                         resolve_result = await self.api_client.resolve(
-                            sub_query, [toolset_signature]
+                            sub_query, [toolset_signature], banks=banks
                         )
                         tool_name = resolve_result["resolved"]["tool"]
                         parameters = resolve_result["resolved"]["parameters"]
 
-                    # Execute the tool
                     success = await self.execute_tool(tool_name, parameters)
 
                     results.append(
@@ -86,8 +183,15 @@ class CommandHandler:
                             "success": success,
                             "tool": tool_name,
                             "parameters": parameters,
-                            "area": area,
+                            "area": sub_area,
                         }
+                    )
+
+                # Save last executed command for correction window
+                if results:
+                    last = results[-1]
+                    self._save_last_command(
+                        last["query"], last["tool"], last["parameters"], last["area"]
                     )
 
                 response_data = {
@@ -98,15 +202,11 @@ class CommandHandler:
                 }
 
                 if use_respond and responses:
-                    # Combine responses into natural language
                     response_data["response"] = " ".join(responses)
 
                 return response_data
             else:
-                # Single command (original behavior)
-                area = result_data["classification"]
-
-                # Handle case where classification is empty (extraction needed but not performed)
+                # Single command
                 if not area:
                     _LOGGER.error(
                         "No classification found and extraction not performed"
@@ -119,24 +219,25 @@ class CommandHandler:
                         ),
                     }
 
-                # Step 2: Resolve or respond with area-specific toolset (1 request)
                 toolset_signature = (
                     f"ha-{area}-v1" if area != "global" else "ha-global-v1"
                 )
 
                 if use_respond:
-                    # Use respond endpoint for natural language response
                     result = await self.api_client.respond(query, [toolset_signature])
                     response_text = result.get("response", {}).get("text", "")
                 else:
-                    # Use resolve endpoint for structured tool call
-                    result = await self.api_client.resolve(query, [toolset_signature])
+                    result = await self.api_client.resolve(
+                        query, [toolset_signature], banks=banks
+                    )
 
                 tool_name = result["resolved"]["tool"]
                 parameters = result["resolved"]["parameters"]
 
-                # Step 3: Execute the tool
                 success = await self.execute_tool(tool_name, parameters)
+
+                # Save for correction window
+                self._save_last_command(query, tool_name, parameters, area)
 
                 response_data = {
                     "success": success,

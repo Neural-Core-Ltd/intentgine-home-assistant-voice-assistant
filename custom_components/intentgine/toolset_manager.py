@@ -5,7 +5,7 @@ import time
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, area_registry as ar
 
-from .const import TOOLSET_PREFIX, TOOLSET_VERSION, TOOLSET_GLOBAL
+from .const import TOOLSET_PREFIX, TOOLSET_VERSION, TOOLSET_GLOBAL, CORRECTION_BANK_NAME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class ToolsetManager:
         self.toolsets = {}
         self._last_sync: float = 0
         self._syncing: bool = False
+        self.correction_bank_id: str | None = None
 
     def get_exposed_entities(self):
         """Get all entities exposed to voice assistants."""
@@ -265,6 +266,14 @@ class ToolsetManager:
                     {"label": area_id, "description": f"Commands about the {area_name}"}
                 )
 
+        # Add correction class for detecting user corrections
+        area_classes.append(
+            {
+                "label": "correction",
+                "description": "User is correcting a previous command, e.g. 'no, the kitchen lights', 'I meant the bedroom', 'not that one, the other one', 'wrong room'",
+            }
+        )
+
         # Create or update classification set with extraction enabled
         try:
             await self.api_client.create_classification_set(
@@ -321,7 +330,34 @@ class ToolsetManager:
 
             self.toolsets[signature] = tools
 
+        # Ensure correction memory bank exists and is assigned
+        await self._ensure_correction_bank()
+
         _LOGGER.info("Toolset sync complete")
+
+    async def _ensure_correction_bank(self):
+        """Create correction memory bank if it doesn't exist, and assign to app."""
+        try:
+            banks = await self.api_client.list_banks()
+            existing = next(
+                (b for b in banks if b.get("name") == CORRECTION_BANK_NAME), None
+            )
+
+            if existing:
+                self.correction_bank_id = existing["bank_id"]
+            else:
+                bank = await self.api_client.create_bank(
+                    CORRECTION_BANK_NAME,
+                    "Auto-corrections from user feedback",
+                )
+                self.correction_bank_id = bank["bank_id"]
+                _LOGGER.info("Created correction bank: %s", self.correction_bank_id)
+
+            # Assign to app (idempotent via ON CONFLICT DO NOTHING)
+            await self.api_client.assign_bank(self.correction_bank_id)
+            _LOGGER.info("Correction bank assigned: %s", self.correction_bank_id)
+        except Exception as err:
+            _LOGGER.warning("Failed to ensure correction bank: %s", err)
 
     def get_all_toolset_signatures(self):
         """Get all toolset signatures."""

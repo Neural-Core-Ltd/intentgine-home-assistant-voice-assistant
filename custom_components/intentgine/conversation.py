@@ -78,7 +78,12 @@ class IntentgineConversationEntity(
             intent_response = intent.IntentResponse(language=user_input.language)
 
             if result.get("success"):
-                if result.get("extracted") and result.get("results"):
+                if result.get("corrected"):
+                    response_text = (
+                        f"Corrected. I executed {result.get('tool', 'the command')} "
+                        f"instead of {result.get('original_tool', 'the previous command')}."
+                    )
+                elif result.get("extracted") and result.get("results"):
                     tools = [r.get("tool", "?") for r in result["results"]]
                     response_text = f"Done. I executed {', '.join(tools)}."
                 else:
