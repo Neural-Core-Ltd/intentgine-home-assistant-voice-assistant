@@ -235,6 +235,38 @@ class IntentgineAPIClient:
             data["description"] = description
         return await self._request("PUT", f"/v1/classification-sets/{signature}", data)
 
+    async def list_banks(self) -> list[dict]:
+        """List all memory banks."""
+        return await self._request("GET", "/v1/banks")
+
+    async def create_bank(self, name: str, description: str = None) -> dict:
+        """Create a memory bank."""
+        data = {"name": name}
+        if description:
+            data["description"] = description
+        return await self._request("POST", "/v1/banks", data)
+
+    async def assign_bank(self, bank_id: str) -> dict:
+        """Assign a memory bank to the current app."""
+        return await self._request("POST", f"/v1/banks/{bank_id}/assign")
+
+    async def correct(
+        self,
+        query: str,
+        correct_tool: str,
+        target_bank: str,
+        correct_params: dict = None,
+    ) -> dict:
+        """Submit a correction to a memory bank."""
+        data = {
+            "query": query,
+            "correct_tool": correct_tool,
+            "target_bank": target_bank,
+        }
+        if correct_params:
+            data["correct_params"] = correct_params
+        return await self._request("POST", "/v1/correct", data)
+
     async def close(self):
         """Close the session."""
         if self.session:
