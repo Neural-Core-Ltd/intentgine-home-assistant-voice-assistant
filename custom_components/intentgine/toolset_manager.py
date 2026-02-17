@@ -255,15 +255,19 @@ class ToolsetManager:
             if area_id == "global":
                 area_classes.append(
                     {
-                        "label": "global",
+                        "label": TOOLSET_GLOBAL,
                         "description": "Scenes, automations, or whole-home commands",
                     }
                 )
             else:
                 area = area_reg.async_get_area(area_id)
                 area_name = area.name if area else area_id
+                signature = f"{TOOLSET_PREFIX}-{area_id}-{TOOLSET_VERSION}"
                 area_classes.append(
-                    {"label": area_id, "description": f"Commands about the {area_name}"}
+                    {
+                        "label": signature,
+                        "description": f"Commands about the {area_name}",
+                    }
                 )
 
         # Add correction class for detecting user corrections
