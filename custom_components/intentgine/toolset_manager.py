@@ -3,7 +3,11 @@
 import logging
 import time
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er, area_registry as ar
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    area_registry as ar,
+)
 
 from .const import TOOLSET_PREFIX, TOOLSET_VERSION, TOOLSET_GLOBAL, CORRECTION_BANK_NAME
 
@@ -28,12 +32,20 @@ class ToolsetManager:
     def get_exposed_entities(self):
         """Get all entities exposed to voice assistants."""
         entity_reg = er.async_get(self.hass)
+        device_reg = dr.async_get(self.hass)
         exposed = []
 
         for entity in entity_reg.entities.values():
             if entity.options.get("conversation", {}).get("should_expose", False):
                 state = self.hass.states.get(entity.entity_id)
                 if state:
+                    # Resolve area: entity override > device area
+                    area_id = entity.area_id
+                    if not area_id and entity.device_id:
+                        device = device_reg.async_get(entity.device_id)
+                        if device:
+                            area_id = device.area_id
+
                     exposed.append(
                         {
                             "entity_id": entity.entity_id,
@@ -41,7 +53,7 @@ class ToolsetManager:
                                 "friendly_name", entity.entity_id
                             ),
                             "domain": entity.domain,
-                            "area_id": entity.area_id,
+                            "area_id": area_id,
                         }
                     )
 
