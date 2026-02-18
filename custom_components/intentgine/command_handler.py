@@ -48,9 +48,7 @@ class CommandHandler:
         bank_id = self.toolset_manager.correction_bank_id
 
         # Re-resolve the original query + correction as context, using the same area toolset
-        toolset_signature = (
-            f"ha-{prev['area']}-v1" if prev["area"] != "global" else "ha-global-v1"
-        )
+        toolset_signature = prev["area"]
 
         # Build a combined query: original intent + correction hint
         corrected_query = f"{prev['query']} (correction: {query})"
@@ -154,9 +152,7 @@ class CommandHandler:
                 for extracted in result_data["extracted"]:
                     sub_query = extracted["query"]
                     sub_area = extracted["classification"]
-                    toolset_signature = (
-                        f"ha-{sub_area}-v1" if sub_area != "global" else "ha-global-v1"
-                    )
+                    toolset_signature = sub_area
 
                     if use_respond:
                         respond_result = await self.api_client.respond(
@@ -219,9 +215,7 @@ class CommandHandler:
                         ),
                     }
 
-                toolset_signature = (
-                    f"ha-{area}-v1" if area != "global" else "ha-global-v1"
-                )
+                toolset_signature = area
 
                 if use_respond:
                     result = await self.api_client.respond(query, [toolset_signature])
@@ -274,9 +268,7 @@ class CommandHandler:
             results = []
             for classification in classifications:
                 area = classification["label"]
-                toolset_signature = (
-                    f"ha-{area}-v1" if area != "global" else "ha-global-v1"
-                )
+                    toolset_signature = area
 
                 # Resolve the specific command for this area
                 resolve_result = await self.api_client.resolve(
